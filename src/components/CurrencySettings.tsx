@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Globe, Check } from 'lucide-react';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../constants';
@@ -18,6 +18,13 @@ export const CurrencySettings: React.FC<CurrencySettingsProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [localCurrency, setLocalCurrency] = useState(selectedCurrency || DEFAULT_CURRENCY);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Sync local state with prop changes
+  useEffect(() => {
+    if (selectedCurrency) {
+      setLocalCurrency(selectedCurrency);
+    }
+  }, [selectedCurrency]);
 
   const currentCurrency = CURRENCIES[localCurrency] || CURRENCIES[DEFAULT_CURRENCY];
   const currencyOptions = getCurrencyOptions();

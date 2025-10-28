@@ -260,9 +260,10 @@ export const Profile: React.FC = () => {
               if (!user?._id) return;
               try {
                 await userService.updateCurrency(user._id, currency);
-                // Update user in store
+                // Update user in store and localStorage
                 const updatedUser = { ...user, preferredCurrency: currency };
                 useAuthStore.setState({ user: updatedUser });
+                localStorage.setItem('user', JSON.stringify(updatedUser));
                 setSuccess('Currency preference updated successfully');
                 setTimeout(() => setSuccess(null), 3000);
               } catch (err: any) {
