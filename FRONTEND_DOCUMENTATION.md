@@ -157,12 +157,95 @@ function App() {
   - Filter state (type, category, date range)
   - Pagination state
   - Add/Edit modal state
+  - **Delete confirmation modal state**
+  - **Transaction deletion loading state**
+  - **Delete error state**
 - **Key Features**:
   - Advanced filtering by type, category, date
   - Sorting by date/amount
   - Pagination
   - Add, edit, delete transactions
+  - **Delete button (🗑️ icon) on each transaction row**
+  - **Confirmation modal before deletion with transaction details**
+  - **Loading state during deletion ("Deleting...")**
+  - **Error toast notification on deletion failure**
   - Category-based filtering with multi-select
+- **Delete Transaction Flow**:
+  1. User clicks delete button (🗑️) on transaction row
+  2. Confirmation modal appears showing transaction details (type, amount, category)
+  3. User confirms deletion
+  4. API call to `DELETE /api/transactions/:id` via `transactionService.delete()`
+  5. Transaction list refreshes automatically on success
+  6. Error toast appears at bottom-right if deletion fails
+
+### Reusable Components
+
+#### **ConfirmationModal.tsx** - Confirmation Dialog
+**Location**: `src/components/ConfirmationModal.tsx`
+
+**Purpose**: Reusable modal for confirming dangerous actions (like deletion)
+
+**Props Interface**:
+```typescript
+interface ConfirmationModalProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;      // Default: 'Confirm'
+  cancelText?: string;       // Default: 'Cancel'
+  isDangerous?: boolean;     // Default: false (shows red theme if true)
+  isLoading?: boolean;       // Default: false (disables buttons if true)
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+```
+
+**Features**:
+- Animated entrance/exit with Framer Motion
+- Backdrop click to cancel
+- Danger mode with red color scheme (used for delete actions)
+- Loading state with disabled buttons
+- Alert icon for dangerous actions
+- Responsive design with dark mode support
+
+**Usage Example** (Delete Transaction):
+```typescript
+import { ConfirmationModal } from '../components/ConfirmationModal';
+import { Transaction } from '../types';
+
+const [showDeleteModal, setShowDeleteModal] = useState(false);
+const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
+
+<ConfirmationModal
+  isOpen={showDeleteModal}
+  title="Delete Transaction"
+  message={
+    transactionToDelete
+      ? `Are you sure you want to delete this ${transactionToDelete.type.toLowerCase()} transaction of $${transactionToDelete.amount.toFixed(2)} in ${transactionToDelete.category}? This action cannot be undone.`
+      : 'Are you sure you want to delete this transaction?'
+  }
+  confirmText={isDeletingTransaction ? 'Deleting...' : 'Delete'}
+  cancelText="Cancel"
+  isDangerous={true}
+  isLoading={isDeletingTransaction}
+  onConfirm={handleDeleteConfirm}
+  onCancel={handleDeleteCancel}
+/>
+```
+
+#### **AddTransactionModal.tsx** - Transaction Form Modal
+**Location**: `src/components/AddTransactionModal.tsx`
+
+**Purpose**: Modal form for creating new transactions
+
+**Features**:
+- Form validation
+- Currency input with formatting
+- Category selection dropdown
+- Date picker
+- Type toggle (Income/Expense)
+- Loading state during submission
 
 ---
 
@@ -289,13 +372,70 @@ const handleAddTransaction = async () => {
       description: 'Lunch at restaurant',
       date: new Date().toISOString()
     });
-    
+
     // Refresh transaction list
     fetchTransactions({ userId: user._id, limit: 10, skip: 0 });
   } catch (error) {
     console.error('Failed to create transaction:', error);
   }
 };
+```
+
+**Deleting a Transaction** (from `Transactions.tsx`):
+
+```typescript
+import { transactionService } from '../api/services/transactionService';
+import { Transaction } from '../types';
+
+const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
+const [deleteError, setDeleteError] = useState<string | null>(null);
+
+const handleDeleteConfirm = async () => {
+  if (!transactionToDelete || !user?._id) return;
+
+  setIsDeletingTransaction(true);
+  setDeleteError(null);
+
+  try {
+    // Call DELETE API endpoint
+    await transactionService.delete(transactionToDelete._id);
+
+    // Close modal
+    setShowDeleteModal(false);
+    setTransactionToDelete(null);
+
+    // Refresh transactions to update the list
+    fetchTransactions({
+      userId: user._id,
+      limit: PAGINATION.DEFAULT_LIMIT,
+      skip: 0,
+      ...filters
+    } as TransactionFilters);
+  } catch (error: any) {
+    // Display error message to user
+    const errorMessage = error.response?.data?.error || 'Failed to delete transaction';
+    setDeleteError(errorMessage);
+  } finally {
+    setIsDeletingTransaction(false);
+  }
+};
+```
+
+**API Response for DELETE**:
+```json
+{
+  "message": "Transaction deleted successfully",
+  "transaction": {
+    "_id": "507f1f77bcf86cd799439011",
+    "user": "507f191e810c19729de860ea",
+    "type": "Expense",
+    "category": "Food & Dining",
+    "amount": 50.00,
+    "description": "Lunch at restaurant",
+    "date": "2025-01-15T12:00:00.000Z"
+  }
+}
 ```
 
 ---
@@ -388,13 +528,31 @@ interface TransactionState {
 - `fetchByCategory()`: Fetches category-wise breakdown
 - `createTransaction()`: Creates new transaction
 - `updateTransaction()`: Updates existing transaction
-- `deleteTransaction()`: Deletes transaction
+- **`deleteTransaction(id: string)`**: Deletes transaction by ID
+
+**Delete Transaction Implementation**:
+```typescript
+deleteTransaction: async (id: string) => {
+  set({ isLoading: true, error: null });
+  try {
+    await transactionService.delete(id);
+    set({ isLoading: false });
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.error || 'Failed to delete transaction';
+    set({ error: errorMessage, isLoading: false });
+    throw error;
+  }
+}
+```
+
+**State Update After Deletion**:
+After a successful deletion, the component calling `deleteTransaction()` should refresh the transaction list by calling `fetchTransactions()` to ensure the UI reflects the current state. The deleted transaction is removed from the backend, and the refreshed list will no longer include it.
 
 **Usage Example**:
 ```typescript
 import { useTransactionStore } from '../store/transactionStore';
 
-const { transactions, summary, fetchTransactions, createTransaction } = useTransactionStore();
+const { transactions, summary, fetchTransactions, createTransaction, deleteTransaction } = useTransactionStore();
 
 // Fetch transactions
 await fetchTransactions({
@@ -412,6 +570,20 @@ await createTransaction({
   amount: 25.50,
   description: 'Coffee shop'
 });
+
+// Delete transaction
+try {
+  await deleteTransaction('507f1f77bcf86cd799439011');
+  // Refresh list after successful deletion
+  await fetchTransactions({
+    userId: user._id,
+    limit: 10,
+    skip: 0
+  });
+} catch (error) {
+  // Error is already set in store state
+  console.error('Delete failed:', error);
+}
 ```
 
 #### **themeStore.ts** - Theme State
@@ -527,6 +699,12 @@ const { isDarkMode, toggleDarkMode } = useThemeStore();
 
 ### 💰 Transaction Management
 - **CRUD operations**: Create, Read, Update, Delete transactions
+- **Delete with Confirmation**:
+  - Delete button (🗑️ icon) on each transaction row
+  - Confirmation modal with transaction details before deletion
+  - Loading state during deletion ("Deleting...")
+  - Error handling with toast notifications
+  - Automatic list refresh after successful deletion
 - **Advanced filtering**: By type, category, date range
 - **Sorting**: By date or amount (ascending/descending)
 - **Pagination**: Configurable page size (default: 10 items)
@@ -869,7 +1047,12 @@ interface CategoryBreakdown {
 - Filters: Type, Category, Date Range
 - Sorting: By date or amount
 - Add new transaction modal
-- Edit/Delete transaction actions
+- **Delete transaction with confirmation**:
+  - Delete button (🗑️ icon) in Actions column
+  - Confirmation modal showing transaction details
+  - Loading state ("Deleting...") during API call
+  - Error toast on failure
+  - Automatic refresh on success
 - Category-based filtering
 
 #### **Analytics Page** (`src/pages/Analytics.tsx`)

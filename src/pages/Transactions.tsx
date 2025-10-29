@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
 import { CATEGORIES, PAGINATION, CURRENCIES, DEFAULT_CURRENCY } from '../constants';
-import { TransactionFilters, CreateTransactionRequest } from '../types';
-import { ChevronLeft, ChevronRight, Filter, Plus } from 'lucide-react';
+import { TransactionFilters, CreateTransactionRequest, Transaction } from '../types';
+import { ChevronLeft, ChevronRight, Filter, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AddTransactionModal } from '../components/AddTransactionModal';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 import { transactionService } from '../api/services/transactionService';
 
 export const Transactions: React.FC = () => {
@@ -24,6 +25,12 @@ export const Transactions: React.FC = () => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Delete transaction state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Get currency symbol based on user preference
   const getCurrencySymbol = () => {
@@ -179,6 +186,46 @@ export const Transactions: React.FC = () => {
     } finally {
       setIsAddingTransaction(false);
     }
+  };
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    setTransactionToDelete(transaction);
+    setShowDeleteModal(true);
+    setDeleteError(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!transactionToDelete || !user?._id) return;
+
+    setIsDeletingTransaction(true);
+    setDeleteError(null);
+
+    try {
+      await transactionService.delete(transactionToDelete._id);
+
+      // Close modal
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+
+      // Refresh transactions to update the list
+      fetchTransactions({
+        userId: user._id,
+        limit: PAGINATION.DEFAULT_LIMIT,
+        skip: 0,
+        ...filters
+      } as TransactionFilters);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Failed to delete transaction';
+      setDeleteError(errorMessage);
+    } finally {
+      setIsDeletingTransaction(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setTransactionToDelete(null);
+    setDeleteError(null);
   };
 
   return (
@@ -344,6 +391,7 @@ export const Transactions: React.FC = () => {
                       <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300 hidden sm:table-cell">Description</th>
                       <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Type</th>
                       <th className="text-right py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Amount</th>
+                      <th className="text-center py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -361,6 +409,15 @@ export const Transactions: React.FC = () => {
                         </td>
                         <td className={`py-3 px-4 text-right font-semibold whitespace-nowrap ${tx.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                           {tx.type === 'Income' ? '+' : '-'}{currencySymbol}{tx.amount.toFixed(2)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => handleDeleteClick(tx)}
+                            className="inline-flex items-center justify-center p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200"
+                            title="Delete transaction"
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -401,6 +458,35 @@ export const Transactions: React.FC = () => {
           onSubmit={handleAddTransaction}
           isLoading={isAddingTransaction}
         />
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmationModal
+          isOpen={showDeleteModal}
+          title="Delete Transaction"
+          message={
+            transactionToDelete
+              ? `Are you sure you want to delete this ${transactionToDelete.type.toLowerCase()} transaction of ${currencySymbol}${transactionToDelete.amount.toFixed(2)} in ${transactionToDelete.category}? This action cannot be undone.`
+              : 'Are you sure you want to delete this transaction?'
+          }
+          confirmText={isDeletingTransaction ? 'Deleting...' : 'Delete'}
+          cancelText="Cancel"
+          isDangerous={true}
+          isLoading={isDeletingTransaction}
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+        />
+
+        {/* Delete Error Message */}
+        {deleteError && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-4 right-4 bg-red-600 dark:bg-red-700 text-white px-6 py-3 rounded-lg shadow-lg z-50"
+          >
+            <p className="font-medium">{deleteError}</p>
+          </motion.div>
+        )}
       </div>
     </div>
   );

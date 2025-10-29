@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { LoginRequest } from '../types';
@@ -7,12 +7,28 @@ import { motion } from 'framer-motion';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { user, login, isLoading, error, clearError } = useAuthStore();
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
+
+  // Clear errors on mount
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -20,17 +36,52 @@ export const Login: React.FC = () => {
       ...prev,
       [name]: value
     }));
+    // Clear validation error for this field
+    setValidationErrors(prev => ({
+      ...prev,
+      [name]: undefined
+    }));
+  };
+
+  const validateForm = (): boolean => {
+    const errors: { email?: string; password?: string } = {};
+
+    // Email validation
+    if (!formData.email) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     clearError();
+
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
 
     try {
       await login(formData);
-      navigate('/dashboard');
+      // Only navigate if login was successful (no error thrown)
+      navigate('/dashboard', { replace: true });
     } catch (err) {
-      // Error is handled by the store
+      // Error is handled by the store, just prevent navigation
+      console.error('Login error:', err);
+      // Don't navigate - stay on login page
     }
   };
 
@@ -84,11 +135,15 @@ export const Login: React.FC = () => {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="you@example.com"
-                  required
                   disabled={isLoading}
-                  className="input-field pl-12 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white dark:placeholder-neutral-500"
+                  className={`input-field pl-12 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white dark:placeholder-neutral-500 ${
+                    validationErrors.email ? 'border-red-500 dark:border-red-500' : ''
+                  }`}
                 />
               </div>
+              {validationErrors.email && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.email}</p>
+              )}
             </div>
 
             {/* Password Field */}
@@ -103,9 +158,10 @@ export const Login: React.FC = () => {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="••••••••"
-                  required
                   disabled={isLoading}
-                  className="input-field pl-12 pr-12 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white dark:placeholder-neutral-500"
+                  className={`input-field pl-12 pr-12 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white dark:placeholder-neutral-500 ${
+                    validationErrors.password ? 'border-red-500 dark:border-red-500' : ''
+                  }`}
                 />
                 <button
                   type="button"
@@ -113,9 +169,12 @@ export const Login: React.FC = () => {
                   className="absolute right-4 top-3.5 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 transition-colors"
                   disabled={isLoading}
                 >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
                 </button>
               </div>
+              {validationErrors.password && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.password}</p>
+              )}
             </div>
 
             {/* Submit Button */}
