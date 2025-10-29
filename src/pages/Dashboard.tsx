@@ -4,6 +4,7 @@ import { useTransactionStore } from '../store/transactionStore';
 import { PAGINATION, CURRENCIES, DEFAULT_CURRENCY } from '../constants';
 import { TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { EmptyStateCard } from '../components/EmptyStateCard';
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuthStore();
@@ -16,6 +17,17 @@ export const Dashboard: React.FC = () => {
   };
 
   const currencySymbol = getCurrencySymbol();
+
+  // Empty state detection - check if user has no transactions
+  const isEmptyState = useMemo(() => {
+    return (
+      !isLoading &&
+      summary &&
+      (summary.totalIncome ?? 0) === 0 &&
+      (summary.totalExpense ?? 0) === 0 &&
+      transactions.length === 0
+    );
+  }, [isLoading, summary, transactions]);
 
   // Calculate month-over-month comparison
   const monthComparison = useMemo(() => {
@@ -95,13 +107,18 @@ export const Dashboard: React.FC = () => {
           <p className="section-subtitle dark:text-neutral-400">Welcome back, {user?.username}! Here's your financial overview.</p>
         </motion.div>
 
-        {/* Summary Cards */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
-        >
+        {/* Show Empty State or Dashboard Content */}
+        {isEmptyState ? (
+          <EmptyStateCard />
+        ) : (
+          <>
+            {/* Summary Cards */}
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+            >
             {/* Income Card */}
             <motion.div
               variants={itemVariants}
@@ -193,64 +210,66 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
             </motion.div>
-        </motion.div>
+            </motion.div>
 
-        {/* Recent Transactions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-soft dark:shadow-lg border border-neutral-200 dark:border-neutral-800 transition-colors duration-300"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">Recent Transactions</h2>
-          </div>
+            {/* Recent Transactions */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-soft dark:shadow-lg border border-neutral-200 dark:border-neutral-800 transition-colors duration-300"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">Recent Transactions</h2>
+              </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="text-center py-12">
-              <Wallet className="mx-auto text-neutral-300 dark:text-neutral-700 mb-4" size={48} />
-              <p className="text-neutral-600 dark:text-neutral-400 font-medium">No transactions yet</p>
-              <p className="text-neutral-500 dark:text-neutral-500 text-sm">Create one to get started!</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800">
-                    <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Date</th>
-                    <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Category</th>
-                    <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300 hidden sm:table-cell">Description</th>
-                    <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Type</th>
-                    <th className="text-right py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((tx) => (
-                    <tr key={tx._id} className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
-                      <td className="py-3 px-4 text-sm text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
-                        {new Date(tx.date).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-neutral-700 dark:text-neutral-300 font-medium whitespace-nowrap">{tx.category}</td>
-                      <td className="py-3 px-4 text-sm text-neutral-600 dark:text-neutral-400 hidden sm:table-cell">{tx.description || '-'}</td>
-                      <td className="py-3 px-4">
-                        <span className={`badge ${tx.type === 'Income' ? 'badge-success' : 'badge-error'}`}>
-                          {tx.type}
-                        </span>
-                      </td>
-                      <td className={`py-3 px-4 text-right font-semibold whitespace-nowrap ${tx.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {tx.type === 'Income' ? '+' : '-'}{currencySymbol}{tx.amount.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </motion.div>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                </div>
+              ) : transactions.length === 0 ? (
+                <div className="text-center py-12">
+                  <Wallet className="mx-auto text-neutral-300 dark:text-neutral-700 mb-4" size={48} />
+                  <p className="text-neutral-600 dark:text-neutral-400 font-medium">No transactions yet</p>
+                  <p className="text-neutral-500 dark:text-neutral-500 text-sm">Create one to get started!</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-neutral-200 dark:border-neutral-800">
+                        <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Date</th>
+                        <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Category</th>
+                        <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300 hidden sm:table-cell">Description</th>
+                        <th className="text-left py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Type</th>
+                        <th className="text-right py-3 px-4 font-semibold text-neutral-700 dark:text-neutral-300">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.map((tx) => (
+                        <tr key={tx._id} className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                          <td className="py-3 px-4 text-sm text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                            {new Date(tx.date).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-neutral-700 dark:text-neutral-300 font-medium whitespace-nowrap">{tx.category}</td>
+                          <td className="py-3 px-4 text-sm text-neutral-600 dark:text-neutral-400 hidden sm:table-cell">{tx.description || '-'}</td>
+                          <td className="py-3 px-4">
+                            <span className={`badge ${tx.type === 'Income' ? 'badge-success' : 'badge-error'}`}>
+                              {tx.type}
+                            </span>
+                          </td>
+                          <td className={`py-3 px-4 text-right font-semibold whitespace-nowrap ${tx.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {tx.type === 'Income' ? '+' : '-'}{currencySymbol}{tx.amount.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -27,12 +27,19 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Clear auth data on unauthorized
-      localStorage.removeItem(LocalStorageKeys.AUTH_TOKEN);
-      localStorage.removeItem(LocalStorageKeys.USER_ID);
-      localStorage.removeItem(LocalStorageKeys.USER_DATA);
-      // Redirect to login
-      window.location.href = '/login';
+      // Only redirect to login if we're not already on the login/register pages
+      // This prevents page reload when user enters wrong credentials
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' || currentPath === '/register';
+
+      if (!isAuthPage) {
+        // Clear auth data on unauthorized (session expired)
+        localStorage.removeItem(LocalStorageKeys.AUTH_TOKEN);
+        localStorage.removeItem(LocalStorageKeys.USER_ID);
+        localStorage.removeItem(LocalStorageKeys.USER_DATA);
+        // Redirect to login
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

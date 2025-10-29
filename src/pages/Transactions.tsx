@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
 import { CATEGORIES, PAGINATION, CURRENCIES, DEFAULT_CURRENCY } from '../constants';
@@ -10,6 +11,7 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 import { transactionService } from '../api/services/transactionService';
 
 export const Transactions: React.FC = () => {
+  const location = useLocation();
   const { user } = useAuthStore();
   const { transactions, pagination, fetchTransactions, isLoading } = useTransactionStore();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -52,6 +54,16 @@ export const Transactions: React.FC = () => {
     }
     return transactions.filter(tx => selectedCategories.includes(tx.category));
   }, [transactions, selectedCategories]);
+
+  // Check if we should open the add modal automatically (from empty state navigation)
+  useEffect(() => {
+    const state = location.state as { openAddModal?: boolean } | null;
+    if (state?.openAddModal) {
+      setShowAddModal(true);
+      // Clear the state to prevent reopening on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   useEffect(() => {
     if (user?._id) {
