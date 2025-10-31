@@ -65,6 +65,18 @@ export const transactionService = {
   async delete(id: string): Promise<ApiResponse<any>> {
     const response = await apiClient.delete<ApiResponse<any>>(`/transactions/${id}`);
     return response.data;
+  },
+
+  async importStatement(file: File): Promise<ApiResponse<any>> {
+    const formData = new FormData();
+    formData.append('bankStatementFile', file);
+
+    const response = await apiClient.post<ApiResponse<any>>('/transactions/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   }
 };
 

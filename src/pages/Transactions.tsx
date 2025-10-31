@@ -4,9 +4,10 @@ import { useAuthStore } from '../store/authStore';
 import { useTransactionStore } from '../store/transactionStore';
 import { CATEGORIES, PAGINATION, CURRENCIES, DEFAULT_CURRENCY } from '../constants';
 import { TransactionFilters, CreateTransactionRequest, Transaction } from '../types';
-import { ChevronLeft, ChevronRight, Filter, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Plus, Trash2, Upload } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AddTransactionModal } from '../components/AddTransactionModal';
+import { ImportStatementModal } from '../components/ImportStatementModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { transactionService } from '../api/services/transactionService';
 
@@ -33,6 +34,12 @@ export const Transactions: React.FC = () => {
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Import statement state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Get currency symbol based on user preference
   const getCurrencySymbol = () => {
@@ -240,6 +247,50 @@ export const Transactions: React.FC = () => {
     setDeleteError(null);
   };
 
+  const handleImport = async (file: File) => {
+    if (!user?._id) return;
+
+    setIsImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      const response = await transactionService.importStatement(file);
+
+      // Extract the count of imported transactions from the response
+      const importedCount = response.data?.importedCount || response.data?.count || 0;
+
+      // Show success message
+      setImportSuccess(`Successfully imported ${importedCount} transaction${importedCount !== 1 ? 's' : ''}.`);
+
+      // Close modal
+      setShowImportModal(false);
+
+      // Refresh transactions to show the newly imported data
+      fetchTransactions({
+        userId: user._id,
+        limit: PAGINATION.DEFAULT_LIMIT,
+        skip: 0,
+        ...filters
+      } as TransactionFilters);
+
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setImportSuccess(null);
+      }, 5000);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Failed to import bank statement';
+      setImportError(errorMessage);
+
+      // Clear error message after 5 seconds
+      setTimeout(() => {
+        setImportError(null);
+      }, 5000);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 py-8 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -253,13 +304,22 @@ export const Transactions: React.FC = () => {
             <h1 className="section-title dark:text-white">Transactions</h1>
             <p className="section-subtitle dark:text-neutral-400">Manage and view all your financial transactions</p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn-primary flex items-center gap-2 whitespace-nowrap"
-          >
-            <Plus size={20} />
-            Add Transaction
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="btn-secondary flex items-center justify-center gap-2 whitespace-nowrap dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            >
+              <Upload size={20} />
+              Import Statement
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="btn-primary flex items-center justify-center gap-2 whitespace-nowrap"
+            >
+              <Plus size={20} />
+              Add Transaction
+            </button>
+          </div>
         </motion.div>
 
         {/* Filters */}
@@ -471,6 +531,14 @@ export const Transactions: React.FC = () => {
           isLoading={isAddingTransaction}
         />
 
+        {/* Import Statement Modal */}
+        <ImportStatementModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onSubmit={handleImport}
+          isLoading={isImporting}
+        />
+
         {/* Delete Confirmation Modal */}
         <ConfirmationModal
           isOpen={showDeleteModal}
@@ -488,15 +556,32 @@ export const Transactions: React.FC = () => {
           onCancel={handleDeleteCancel}
         />
 
-        {/* Delete Error Message */}
-        {deleteError && (
+        {/* Success Toast */}
+        {importSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-4 right-4 bg-green-600 dark:bg-green-700 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2"
+          >
+            <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p className="font-medium">{importSuccess}</p>
+          </motion.div>
+        )}
+
+        {/* Error Toast */}
+        {(deleteError || importError) && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
             className="fixed bottom-4 right-4 bg-red-600 dark:bg-red-700 text-white px-6 py-3 rounded-lg shadow-lg z-50"
           >
-            <p className="font-medium">{deleteError}</p>
+            <p className="font-medium">{deleteError || importError}</p>
           </motion.div>
         )}
       </div>

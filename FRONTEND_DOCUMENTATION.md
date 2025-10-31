@@ -160,15 +160,20 @@ function App() {
   - **Delete confirmation modal state**
   - **Transaction deletion loading state**
   - **Delete error state**
+  - **Import statement modal state**
+  - **Import loading state**
+  - **Import success/error state**
 - **Key Features**:
   - Advanced filtering by type, category, date
   - Sorting by date/amount
   - Pagination
   - Add, edit, delete transactions
+  - **Bank statement import (PDF upload)**
   - **Delete button (🗑️ icon) on each transaction row**
   - **Confirmation modal before deletion with transaction details**
   - **Loading state during deletion ("Deleting...")**
   - **Error toast notification on deletion failure**
+  - **Success toast notification on import completion**
   - Category-based filtering with multi-select
 - **Delete Transaction Flow**:
   1. User clicks delete button (🗑️) on transaction row
@@ -177,6 +182,16 @@ function App() {
   4. API call to `DELETE /api/transactions/:id` via `transactionService.delete()`
   5. Transaction list refreshes automatically on success
   6. Error toast appears at bottom-right if deletion fails
+- **Import Bank Statement Flow**:
+  1. User clicks "Import Statement" button
+  2. Import modal opens with drag-and-drop file upload area
+  3. User selects or drags a PDF file (max 10MB)
+  4. File validation occurs (PDF only)
+  5. User clicks "Import" button
+  6. API call to `POST /api/transactions/import` via `transactionService.importStatement()`
+  7. Success toast shows count of imported transactions
+  8. Transaction list refreshes automatically to show new data
+  9. Error toast appears if import fails
 
 ### Reusable Components
 
@@ -246,6 +261,71 @@ const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
 - Date picker
 - Type toggle (Income/Expense)
 - Loading state during submission
+
+#### **ImportStatementModal.tsx** - Bank Statement Import Modal
+**Location**: `src/components/ImportStatementModal.tsx`
+
+**Purpose**: Modal for uploading and importing bank statement PDF files
+
+**Props Interface**:
+```typescript
+interface ImportStatementModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (file: File) => Promise<void>;
+  isLoading?: boolean;
+}
+```
+
+**Features**:
+- **Drag-and-drop file upload** with visual feedback
+- **Click-to-upload** functionality via hidden file input
+- **PDF-only validation** (rejects non-PDF files)
+- **File size validation** (max 10MB)
+- **File preview** showing selected file name and size
+- **Loading states** with disabled buttons during upload
+- **Error handling** with inline error messages
+- **Dark mode support** with smooth transitions
+- **Responsive design** for mobile and desktop
+- **Framer Motion animations** for smooth UX
+- **Accessible** with proper ARIA attributes
+
+**Visual States**:
+- **Default**: Upload icon with "Click to upload or drag and drop" instructions
+- **Dragging**: Highlighted border with "Drop your file here" message
+- **File Selected**: Green checkmark icon with file name and size, "Remove file" option
+- **Loading**: Disabled buttons with "Importing..." text
+- **Error**: Red alert banner with error message
+
+**Usage Example** (from `Transactions.tsx`):
+```typescript
+import { ImportStatementModal } from '../components/ImportStatementModal';
+
+const [showImportModal, setShowImportModal] = useState(false);
+const [isImporting, setIsImporting] = useState(false);
+
+const handleImport = async (file: File) => {
+  setIsImporting(true);
+  try {
+    const response = await transactionService.importStatement(file);
+    const importedCount = response.data?.importedCount || 0;
+    setImportSuccess(`Successfully imported ${importedCount} transactions.`);
+    setShowImportModal(false);
+    fetchTransactions({ userId: user._id, limit: 10, skip: 0 });
+  } catch (error: any) {
+    setImportError(error.response?.data?.error || 'Failed to import');
+  } finally {
+    setIsImporting(false);
+  }
+};
+
+<ImportStatementModal
+  isOpen={showImportModal}
+  onClose={() => setShowImportModal(false)}
+  onSubmit={handleImport}
+  isLoading={isImporting}
+/>
+```
 
 ---
 
@@ -317,8 +397,31 @@ export const transactionService = {
   async create(data: CreateTransactionRequest): Promise<ApiResponse>
   async update(id: string, data: UpdateTransactionRequest): Promise<ApiResponse>
   async delete(id: string): Promise<ApiResponse>
+  async importStatement(file: File): Promise<ApiResponse>
 }
 ```
+
+**Import Statement Implementation**:
+```typescript
+async importStatement(file: File): Promise<ApiResponse<any>> {
+  const formData = new FormData();
+  formData.append('bankStatementFile', file);
+
+  const response = await apiClient.post<ApiResponse<any>>('/transactions/import', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+}
+```
+
+**Key Details**:
+- Uses `FormData` for proper multipart/form-data handling
+- Field name: `bankStatementFile` (matches backend requirement)
+- Endpoint: `POST /api/transactions/import`
+- Accepts PDF files only
+- Returns `ApiResponse` with `importedCount` in data
 
 #### **userService.ts** - User Profile API
 ```typescript
@@ -434,6 +537,80 @@ const handleDeleteConfirm = async () => {
     "amount": 50.00,
     "description": "Lunch at restaurant",
     "date": "2025-01-15T12:00:00.000Z"
+  }
+}
+```
+
+**Importing Bank Statement** (from `Transactions.tsx`):
+
+```typescript
+import { transactionService } from '../api/services/transactionService';
+
+const [isImporting, setIsImporting] = useState(false);
+const [importSuccess, setImportSuccess] = useState<string | null>(null);
+const [importError, setImportError] = useState<string | null>(null);
+
+const handleImport = async (file: File) => {
+  if (!user?._id) return;
+
+  setIsImporting(true);
+  setImportError(null);
+  setImportSuccess(null);
+
+  try {
+    // Call import API endpoint with file
+    const response = await transactionService.importStatement(file);
+
+    // Extract count of imported transactions
+    const importedCount = response.data?.importedCount || response.data?.count || 0;
+
+    // Show success message
+    setImportSuccess(`Successfully imported ${importedCount} transaction${importedCount !== 1 ? 's' : ''}.`);
+
+    // Close modal
+    setShowImportModal(false);
+
+    // Refresh transactions to show newly imported data
+    fetchTransactions({
+      userId: user._id,
+      limit: PAGINATION.DEFAULT_LIMIT,
+      skip: 0,
+      ...filters
+    } as TransactionFilters);
+
+    // Clear success message after 5 seconds
+    setTimeout(() => setImportSuccess(null), 5000);
+  } catch (error: any) {
+    // Display error message to user
+    const errorMessage = error.response?.data?.error || 'Failed to import bank statement';
+    setImportError(errorMessage);
+
+    // Clear error message after 5 seconds
+    setTimeout(() => setImportError(null), 5000);
+  } finally {
+    setIsImporting(false);
+  }
+};
+```
+
+**API Response for IMPORT**:
+```json
+{
+  "message": "Bank statement imported successfully",
+  "data": {
+    "importedCount": 15,
+    "transactions": [
+      {
+        "_id": "507f1f77bcf86cd799439011",
+        "user": "507f191e810c19729de860ea",
+        "type": "Expense",
+        "category": "Food & Dining",
+        "amount": 50.00,
+        "description": "Restaurant - extracted from PDF",
+        "date": "2025-01-15T12:00:00.000Z"
+      }
+      // ... more transactions
+    ]
   }
 }
 ```
@@ -699,6 +876,14 @@ const { isDarkMode, toggleDarkMode } = useThemeStore();
 
 ### 💰 Transaction Management
 - **CRUD operations**: Create, Read, Update, Delete transactions
+- **Bank Statement Import** (NEW):
+  - Upload PDF bank statements via drag-and-drop or click-to-upload
+  - Automatic transaction extraction from PDF files
+  - File validation (PDF only, max 10MB)
+  - Success toast showing count of imported transactions
+  - Error handling with user-friendly messages
+  - Automatic list refresh after successful import
+  - Loading states during upload and processing
 - **Delete with Confirmation**:
   - Delete button (🗑️ icon) on each transaction row
   - Confirmation modal with transaction details before deletion
@@ -768,6 +953,7 @@ src/
 │   ├── Layout.tsx                # App shell with header/footer
 │   ├── ProtectedRoute.tsx        # Auth guard component
 │   ├── AddTransactionModal.tsx   # Transaction form modal
+│   ├── ImportStatementModal.tsx  # Bank statement import modal (NEW)
 │   ├── ConfirmationModal.tsx     # Reusable confirmation dialog
 │   ├── CurrencyInput.tsx         # Currency input field
 │   └── CurrencySettings.tsx      # Currency preference selector
@@ -983,8 +1169,58 @@ interface CategoryBreakdown {
 ---
 
 **Last Updated**: January 2025
-**Version**: 1.0.0
+**Version**: 1.1.0 (Added Bank Statement Import Feature)
 **Maintained By**: Development Team
+
+---
+
+## 🆕 Recent Updates (v1.1.0)
+
+### Bank Statement Import Feature
+**Added**: January 2025
+
+**New Components**:
+- `ImportStatementModal.tsx` - Reusable modal for PDF file upload with drag-and-drop
+
+**Modified Components**:
+- `Transactions.tsx` - Added "Import Statement" button and import handler logic
+- `transactionService.ts` - Added `importStatement(file: File)` API method
+
+**New API Endpoint**:
+- `POST /api/transactions/import` - Accepts PDF files via multipart/form-data
+
+**Features**:
+- ✅ Drag-and-drop PDF upload
+- ✅ Click-to-upload functionality
+- ✅ File validation (PDF only, max 10MB)
+- ✅ File preview with name and size
+- ✅ Loading states during upload
+- ✅ Success toast with import count
+- ✅ Error handling with user-friendly messages
+- ✅ Automatic transaction list refresh
+- ✅ Dark mode support
+- ✅ Responsive design
+- ✅ Framer Motion animations
+
+**User Flow**:
+1. Click "Import Statement" button on Transactions page
+2. Modal opens with drag-and-drop area
+3. Select or drag PDF file (validated for type and size)
+4. Click "Import" button
+5. File uploads to backend via FormData
+6. Success toast shows: "Successfully imported X transactions."
+7. Transaction list automatically refreshes
+8. Modal closes automatically on success
+
+**Technical Implementation**:
+- Uses `FormData` API for multipart/form-data file upload
+- Field name: `bankStatementFile` (matches backend requirement)
+- Axios POST request with `Content-Type: multipart/form-data` header
+- Response includes `importedCount` in `data` object
+- Automatic list refresh via `fetchTransactions()` from Zustand store
+- Toast notifications with 5-second auto-dismiss
+
+---
 
 ## 4. Pages & Routes
 
@@ -1047,6 +1283,12 @@ interface CategoryBreakdown {
 - Filters: Type, Category, Date Range
 - Sorting: By date or amount
 - Add new transaction modal
+- **Import bank statement** (NEW):
+  - "Import Statement" button next to "Add Transaction"
+  - Drag-and-drop PDF upload modal
+  - File validation and preview
+  - Success toast with import count
+  - Automatic refresh on success
 - **Delete transaction with confirmation**:
   - Delete button (🗑️ icon) in Actions column
   - Confirmation modal showing transaction details
