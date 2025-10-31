@@ -597,23 +597,27 @@ const handleImport = async (file: File) => {
 ```json
 {
   "message": "Bank statement imported successfully",
-  "data": {
-    "importedCount": 15,
-    "transactions": [
-      {
-        "_id": "507f1f77bcf86cd799439011",
-        "user": "507f191e810c19729de860ea",
-        "type": "Expense",
-        "category": "Food & Dining",
-        "amount": 50.00,
-        "description": "Restaurant - extracted from PDF",
-        "date": "2025-01-15T12:00:00.000Z"
-      }
-      // ... more transactions
-    ]
-  }
+  "importedCount": 15,
+  "transactions": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "user": "507f191e810c19729de860ea",
+      "type": "Expense",
+      "category": "Food & Dining",
+      "amount": 50.00,
+      "description": "Restaurant - extracted from PDF",
+      "date": "2025-01-15T12:00:00.000Z"
+    }
+    // ... more transactions
+  ]
 }
 ```
+
+**Note**: The frontend code handles multiple possible response structures:
+- `response.data.importedCount` or `response.data.count`
+- `response.data.transactions.length` (array length)
+- `response.importedCount` or `response.count` (root level)
+- `response.transactions.length` (root level array)
 
 ---
 

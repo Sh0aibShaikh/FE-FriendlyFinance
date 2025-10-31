@@ -258,7 +258,26 @@ export const Transactions: React.FC = () => {
       const response = await transactionService.importStatement(file);
 
       // Extract the count of imported transactions from the response
-      const importedCount = response.data?.importedCount || response.data?.count || 0;
+      // Try multiple possible response structures
+      let importedCount = 0;
+      const responseData: any = response.data;
+      const responseRoot: any = response;
+
+      if (responseData?.importedCount !== undefined) {
+        importedCount = responseData.importedCount;
+      } else if (responseData?.count !== undefined) {
+        importedCount = responseData.count;
+      } else if (responseData?.transactions?.length !== undefined) {
+        importedCount = responseData.transactions.length;
+      } else if (Array.isArray(responseData)) {
+        importedCount = responseData.length;
+      } else if (responseRoot.importedCount !== undefined) {
+        importedCount = responseRoot.importedCount;
+      } else if (responseRoot.count !== undefined) {
+        importedCount = responseRoot.count;
+      } else if (responseRoot.transactions?.length !== undefined) {
+        importedCount = responseRoot.transactions.length;
+      }
 
       // Show success message
       setImportSuccess(`Successfully imported ${importedCount} transaction${importedCount !== 1 ? 's' : ''}.`);
